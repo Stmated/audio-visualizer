@@ -1,0 +1,116 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{2E21C94B-351D-40F2-9AB5-A2EEFE30D3A3}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>Eliason.AudioVisualizer</RootNamespace>
+    <AssemblyName>Eliason.AudioVisualizer</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Bass.Net">
+      <HintPath>C:\Program Files (x86)\BASS.NET\v4.0\Bass.Net.dll</HintPath>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Speech" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="DirectBitmap.cs" />
+    <Compile Include="NoteClickedEventArgs.cs" />
+    <Compile Include="NoteMovedEventArgs.cs" />
+    <Compile Include="AudioPaintEventArgs.cs" />
+    <Compile Include="AudioVisualizer.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="AudioVisualizer.Designer.cs">
+      <DependentUpon>AudioVisualizer.cs</DependentUpon>
+    </Compile>
+    <Compile Include="AudioVisualizer.Keyboard.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="AudioVisualizer.Mouse.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="AudioVisualizer.Paint.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="AudioVisualizer.Work.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="HitTestArea.cs" />
+    <Compile Include="Interval.cs" />
+    <Compile Include="Note.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="RenderRequest.cs" />
+    <Compile Include="SyncEvents.cs" />
+    <Compile Include="TextStyleSpeaker.cs" />
+    <Compile Include="Work.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="AudioVisualizer.resx">
+      <DependentUpon>AudioVisualizer.cs</DependentUpon>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="bass.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bassenc.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bass_fx.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="LIUM_SpkDiarization-4.2.jar">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Eliason.Common\Eliason.Common\Eliason.Common.csproj">
+      <Project>{463A2426-1DE4-4145-BCE9-2AAE2E49ED22}</Project>
+      <Name>Eliason.Common</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Eliason.TextEditor\Eliason.TextEditor\Eliason.TextEditor.csproj">
+      <Project>{68942E75-5200-4B1D-B420-ABD485BAB8B5}</Project>
+      <Name>Eliason.TextEditor</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+</Project>
