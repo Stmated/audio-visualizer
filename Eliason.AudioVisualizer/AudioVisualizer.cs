@@ -7,9 +7,8 @@ using System.Speech.AudioFormat;
 using System.Threading;
 using System.Windows.Forms;
 using Eliason.Common;
-using Un4seen.Bass;
-using Un4seen.Bass.AddOn.Fx;
-using Un4seen.Bass.Misc;
+using ManagedBass;
+using ManagedBass.Fx;
 using Timer = System.Windows.Forms.Timer;
 
 namespace Eliason.AudioVisualizer
@@ -133,7 +132,7 @@ namespace Eliason.AudioVisualizer
             try
             {
                 this._handle = this.Handle;
-                if (Bass.BASS_Init(-1, 44100, BASSInit.BASS_DEVICE_DEFAULT, this._handle) == false)
+                if (Bass.Init(-1, 44100, DeviceInitFlags.Default, this._handle) == false)
                 {
                     Console.WriteLine("Could not initialize the BASS channel for handle '{0}'", this._handle);
                 }
@@ -177,19 +176,19 @@ namespace Eliason.AudioVisualizer
 
         private void PlayTimer_OnTick(object sender, EventArgs e)
         {
-            switch (Bass.BASS_ChannelIsActive(this._playChannel))
+            switch (Bass.ChannelIsActive(this._playChannel))
             {
-                case BASSActive.BASS_ACTIVE_PLAYING:
+                case PlaybackState.Playing:
 
                     if (this.RepeatLength > 0)
                     {
                         // We're on repeat.
                         // Let's check if we have surpassed the current repeat range.
 
-                        var max = this._repeatCurrent + Bass.BASS_ChannelSeconds2Bytes(this._playChannel, this.RepeatLength);
+                        var max = this._repeatCurrent + Bass.ChannelSeconds2Bytes(this._playChannel, this.RepeatLength);
                         if (this.GetCurrentBytePosition() >= max /*- (this.GetBytesPerPixel() * this.GetZoomRatio()) * 2*/)
                         {
-                            var destinationAfterPause = Math.Max(0, max - Bass.BASS_ChannelSeconds2Bytes(this._playChannel, this.RepeatBackwards));
+                            var destinationAfterPause = Math.Max(0, max - Bass.ChannelSeconds2Bytes(this._playChannel, this.RepeatBackwards));
                             var pauseDuration = this.RepeatPause;
 
                             var pauseMilliseconds = pauseDuration * 1000d;
@@ -222,13 +221,13 @@ namespace Eliason.AudioVisualizer
         {
             if (this._playChannel != 0)
             {
-                Bass.BASS_ChannelStop(this._playChannel);
-                Bass.BASS_StreamFree(this._playChannel);
+                Bass.ChannelStop(this._playChannel);
+                Bass.StreamFree(this._playChannel);
                 this._playChannel = 0;
             }
 
-            Bass.BASS_Stop();
-            Bass.BASS_Free();
+            Bass.Stop();
+            Bass.Free();
 
             base.OnHandleDestroyed(e);
         }
@@ -297,7 +296,7 @@ namespace Eliason.AudioVisualizer
 
         public long GetCurrentBytePosition()
         {
-            long currentPosition = Bass.BASS_ChannelGetPosition(this._playChannel);
+            long currentPosition = Bass.ChannelGetPosition(this._playChannel);
             if (currentPosition < 0)
             {
                 return 0;
@@ -309,7 +308,7 @@ namespace Eliason.AudioVisualizer
         public long GetCurrentMillisecondPosition()
         {
             var currentBytePosition = this.GetCurrentBytePosition();
-            var seconds = Bass.BASS_ChannelBytes2Seconds(this._playChannel, currentBytePosition);
+            var seconds = Bass.ChannelBytes2Seconds(this._playChannel, currentBytePosition);
             if (seconds < 0)
             {
                 return 0;
@@ -326,7 +325,7 @@ namespace Eliason.AudioVisualizer
 
         public long SecondsToByteIndex(double seconds)
         {
-            return Bass.BASS_ChannelSeconds2Bytes(this._playChannel, seconds);
+            return Bass.ChannelSeconds2Bytes(this._playChannel, seconds);
         }
 
         public long ByteIndexToMilliseconds(long byteIndex)
@@ -336,7 +335,7 @@ namespace Eliason.AudioVisualizer
 
         public double ByteIndexToSeconds(long byteIndex)
         {
-            return Bass.BASS_ChannelBytes2Seconds(this._playChannel, byteIndex);
+            return Bass.ChannelBytes2Seconds(this._playChannel, byteIndex);
         }
 
         private double NormalizedByteIndexToClientX(long byteIndex)
@@ -368,13 +367,13 @@ namespace Eliason.AudioVisualizer
 
         public int CreateNewChannel()
         {
-            return Bass.BASS_StreamCreateFile(this._currentFilePath, 0, 0, BASSFlag.BASS_DEFAULT | BASSFlag.BASS_STREAM_PRESCAN | BASSFlag.BASS_STREAM_DECODE);
+            return Bass.CreateStream(this._currentFilePath, 0, 0, BassFlags.Default | BassFlags.Prescan | BassFlags.Decode);
         }
 
         public int CreateNewChannel(long offset, long length)
         {
             // Remove BASSFlag.BASS_DEFAULT and replace with BASSFlag.BASS_SAMPLE_FLOAT
-            return Bass.BASS_StreamCreateFile(this._currentFilePath, 0, 0, BASSFlag.BASS_SAMPLE_FLOAT | BASSFlag.BASS_STREAM_PRESCAN | BASSFlag.BASS_STREAM_DECODE);
+            return Bass.CreateStream(this._currentFilePath, 0, 0, BassFlags.Float | BassFlags.Prescan | BassFlags.Decode);
         }
 
         public String CurrentFilePath
@@ -394,15 +393,15 @@ namespace Eliason.AudioVisualizer
                 // BASS_CONFIG_BUFFER
 
                 var decodingChannel = this.CreateNewChannel();
-                var resamplingChannel = BassFx.BASS_FX_TempoCreate(decodingChannel, BASSFlag.BASS_FX_TEMPO_ALGO_CUBIC);
+                var resamplingChannel = BassFx.TempoCreate(decodingChannel, BassFlags.FxTempoAlgorithmCubic);
 
                 this._playChannel = resamplingChannel;
-                this._bytesTotal = Bass.BASS_ChannelGetLength(this._playChannel, BASSMode.BASS_POS_BYTES);
+                this._bytesTotal = Bass.ChannelGetLength(this._playChannel, PositionFlags.Bytes);
 
                 //Bass.BASS_ChannelSetAttribute(this._playChannel, BASSAttribute.BASS_ATTRIB_TEMPO_OPTION_USE_AA_FILTER, 0);
-                Bass.BASS_ChannelSetAttribute(this._playChannel, BASSAttribute.BASS_ATTRIB_TEMPO_OPTION_SEQUENCE_MS, 1); // default 82
-                Bass.BASS_ChannelSetAttribute(this._playChannel, BASSAttribute.BASS_ATTRIB_TEMPO_OPTION_SEEKWINDOW_MS, 36); // default 14
-                Bass.BASS_ChannelSetAttribute(this._playChannel, BASSAttribute.BASS_ATTRIB_TEMPO_OPTION_OVERLAP_MS, 6); // default 12 -- decrease if decrease SEQUENCE_MS,
+                Bass.ChannelSetAttribute(this._playChannel, ChannelAttribute.TempoSequenceMilliseconds, 1); // default 82
+                Bass.ChannelSetAttribute(this._playChannel, ChannelAttribute.TempoSeekWindowMilliseconds, 36); // default 14
+                Bass.ChannelSetAttribute(this._playChannel, ChannelAttribute.TempoOverlapMilliseconds, 6); // default 12 -- decrease if decrease SEQUENCE_MS,
 
                 //var bytesInPreferredTime = Bass.BASS_ChannelSeconds2Bytes(this._playChannel, 15);
                 //var preferredZoomRatio = bytesInPreferredTime / (double)this._bytesTotal;
@@ -433,18 +432,18 @@ namespace Eliason.AudioVisualizer
 
         public void TogglePlayPause()
         {
-            switch (Bass.BASS_ChannelIsActive(this._playChannel))
+            switch (Bass.ChannelIsActive(this._playChannel))
             {
-                case BASSActive.BASS_ACTIVE_PAUSED:
+                case PlaybackState.Paused:
                     this.StartPlaying();
                     break;
-                case BASSActive.BASS_ACTIVE_PLAYING:
+                case PlaybackState.Playing:
                     this.StopPlaying();
                     break;
-                case BASSActive.BASS_ACTIVE_STALLED:
+                case PlaybackState.Stalled:
                     this.StartPlaying();
                     break;
-                case BASSActive.BASS_ACTIVE_STOPPED:
+                case PlaybackState.Stopped:
                     this.StartPlaying();
                     break;
             }
@@ -452,10 +451,10 @@ namespace Eliason.AudioVisualizer
 
         public void StopPlaying()
         {
-            switch (Bass.BASS_ChannelIsActive(this._playChannel))
+            switch (Bass.ChannelIsActive(this._playChannel))
             {
-                case BASSActive.BASS_ACTIVE_PLAYING:
-                    Bass.BASS_ChannelPause(this._playChannel);
+                case PlaybackState.Playing:
+                    Bass.ChannelPause(this._playChannel);
                     break;
             }
         }
@@ -468,28 +467,28 @@ namespace Eliason.AudioVisualizer
                 return;
             }
 
-            switch (Bass.BASS_ChannelIsActive(this._playChannel))
+            switch (Bass.ChannelIsActive(this._playChannel))
             {
-                case BASSActive.BASS_ACTIVE_PLAYING:
+                case PlaybackState.Playing:
 
                     // First pause the channel, 
                     // so we don't play on multiple locations for the same channel.
-                    Bass.BASS_ChannelPause(this._playChannel);
+                    Bass.ChannelPause(this._playChannel);
                     break;
             }
 
-            switch (Bass.BASS_ChannelIsActive(this._playChannel))
+            switch (Bass.ChannelIsActive(this._playChannel))
             {
-                case BASSActive.BASS_ACTIVE_PAUSED:
-                    Bass.BASS_ChannelPlay(this._playChannel, false);
+                case PlaybackState.Paused:
+                    Bass.ChannelPlay(this._playChannel, false);
                     break;
-                case BASSActive.BASS_ACTIVE_STOPPED:
-                    Bass.BASS_ChannelSetPosition(this._playChannel, location ?? this.GetCurrentBytePosition());
-                    Bass.BASS_ChannelPlay(this._playChannel, false);
-                    Bass.BASS_ChannelSetAttribute(this._playChannel, BASSAttribute.BASS_ATTRIB_VOL, 0.5f);
+                case PlaybackState.Stopped:
+                    Bass.ChannelSetPosition(this._playChannel, location ?? this.GetCurrentBytePosition());
+                    Bass.ChannelPlay(this._playChannel, false);
+                    Bass.ChannelSetAttribute(this._playChannel, ChannelAttribute.Volume, 0.5f);
                     break;
-                case BASSActive.BASS_ACTIVE_STALLED:
-                    Bass.BASS_ChannelPlay(this._playChannel, true);
+                case PlaybackState.Stalled:
+                    Bass.ChannelPlay(this._playChannel, true);
                     break;
             }
 
@@ -505,28 +504,28 @@ namespace Eliason.AudioVisualizer
 
         public void SeekBackward(bool large = false)
         {
-            var seconds = Bass.BASS_ChannelBytes2Seconds(this._playChannel, this.GetCurrentBytePosition()) - (large ? this.LargeStep : this.SmallStep);
-            var byteIndex = Bass.BASS_ChannelSeconds2Bytes(this._playChannel, seconds);
+            var seconds = Bass.ChannelBytes2Seconds(this._playChannel, this.GetCurrentBytePosition()) - (large ? this.LargeStep : this.SmallStep);
+            var byteIndex = Bass.ChannelSeconds2Bytes(this._playChannel, seconds);
             this.SetLocation(byteIndex);
         }
 
         public void SeekForward(bool large = false)
         {
-            var seconds = Bass.BASS_ChannelBytes2Seconds(this._playChannel, this.GetCurrentBytePosition()) + (large ? this.LargeStep : this.SmallStep);
-            var byteIndex = Bass.BASS_ChannelSeconds2Bytes(this._playChannel, seconds);
+            var seconds = Bass.ChannelBytes2Seconds(this._playChannel, this.GetCurrentBytePosition()) + (large ? this.LargeStep : this.SmallStep);
+            var byteIndex = Bass.ChannelSeconds2Bytes(this._playChannel, seconds);
             this.SetLocation(byteIndex);
         }
 
         public void SetLocation(long location)
         {
             //this._playTimerPreviousMarker = location;
-            var result = Bass.BASS_ChannelSetPosition(this._playChannel, location);
+            var result = Bass.ChannelSetPosition(this._playChannel, location);
             this._pauseAborted = true;
         }
 
         public void SetLocationMs(long ms)
         {
-            var byteIndex = Bass.BASS_ChannelSeconds2Bytes(this._playChannel, (long)(ms / 1000L));
+            var byteIndex = Bass.ChannelSeconds2Bytes(this._playChannel, (long)(ms / 1000L));
             this.SetLocation(byteIndex);
         }
 
@@ -536,14 +535,14 @@ namespace Eliason.AudioVisualizer
         public float GetVolume()
         {
             float currentVolume = 0f;
-            Bass.BASS_ChannelGetAttribute(this._playChannel, BASSAttribute.BASS_ATTRIB_VOL, ref currentVolume);
+            Bass.ChannelGetAttribute(this._playChannel, ChannelAttribute.Volume, out currentVolume);
 
             return currentVolume;
         }
 
         public void VolumeIncrease()
         {
-            Bass.BASS_ChannelSetAttribute(this._playChannel, BASSAttribute.BASS_ATTRIB_VOL, Math.Min(this.GetVolume() + 0.025f, 1));
+            Bass.ChannelSetAttribute(this._playChannel, ChannelAttribute.Volume, Math.Min(this.GetVolume() + 0.025f, 1));
 
             this._timestampLastAttributeChange = DateTime.Now;
             this.Invalidate();
@@ -551,7 +550,7 @@ namespace Eliason.AudioVisualizer
 
         public void VolumeDecrease()
         {
-            Bass.BASS_ChannelSetAttribute(this._playChannel, BASSAttribute.BASS_ATTRIB_VOL, Math.Max(this.GetVolume() - 0.025f, 0));
+            Bass.ChannelSetAttribute(this._playChannel, ChannelAttribute.Volume, Math.Max(this.GetVolume() - 0.025f, 0));
 
             this._timestampLastAttributeChange = DateTime.Now;
             this.Invalidate();
@@ -566,7 +565,7 @@ namespace Eliason.AudioVisualizer
         {
             float currentSpeed = 0f;
             //Bass.BASS_ChannelGetAttribute(this._playChannel, BASSAttribute.BASS_ATTRIB_TEMPO_FREQ, ref currentSpeed);
-            Bass.BASS_ChannelGetAttribute(this._playChannel, BASSAttribute.BASS_ATTRIB_TEMPO, ref currentSpeed);
+            Bass.ChannelGetAttribute(this._playChannel, ChannelAttribute.Tempo, out currentSpeed);
             return currentSpeed;
         }
 
@@ -576,7 +575,7 @@ namespace Eliason.AudioVisualizer
             //var result = Bass.BASS_ChannelSetAttribute(this._playChannel, BASSAttribute.BASS_ATTRIB_TEMPO_FREQ, newSpeed);
 
             var newSpeed = Math.Max(-90f, Math.Min(500f, value));
-            return Bass.BASS_ChannelSetAttribute(this._playChannel, BASSAttribute.BASS_ATTRIB_TEMPO, newSpeed);
+            return Bass.ChannelSetAttribute(this._playChannel, ChannelAttribute.Tempo, newSpeed);
         }
 
         public void StartTemporaryPause(long destinationAfterPause, double pauseMilliseconds, bool restartable = false)
@@ -596,11 +595,11 @@ namespace Eliason.AudioVisualizer
                 return;
             }
 
-            switch (Bass.BASS_ChannelIsActive(this._playChannel))
+            switch (Bass.ChannelIsActive(this._playChannel))
             {
-                case BASSActive.BASS_ACTIVE_PAUSED:
-                case BASSActive.BASS_ACTIVE_STALLED:
-                case BASSActive.BASS_ACTIVE_STOPPED:
+                case PlaybackState.Paused:
+                case PlaybackState.Stalled:
+                case PlaybackState.Stopped:
 
                     // If we're not currently playing, then there's no point in starting a pause.
                     return;
@@ -659,8 +658,7 @@ namespace Eliason.AudioVisualizer
 
         public SpeechAudioFormatInfo GetSpeechAudioFormat()
         {
-            //EncoderWAV.
-            WaveWriter wv = new WaveWriter("asd.wav", 1, 44100, 16, true);
+            //WaveWriter wv = new WaveWriter("asd.wav", 1, 44100, 16, true);
 
             var samplesPerSecond = 0;
             var bitsPerSample = 0;

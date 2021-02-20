@@ -9,7 +9,6 @@ using System.Windows.Forms;
 using Eliason.TextEditor;
 using Eliason.TextEditor.Native;
 using Eliason.TextEditor.TextStyles;
-using Un4seen.Bass.AddOn.DShow;
 using Eliason.Common;
 
 namespace Eliason.AudioVisualizer

@@ -6,9 +6,12 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Un4seen.Bass;
-using Un4seen.Bass.AddOn.Mix;
-using Un4seen.Bass.Misc;
+using ManagedBass;
+using ManagedBass.Mix;
+
+//using Un4seen.Bass;
+//using Un4seen.Bass.AddOn.Mix;
+//using Un4seen.Bass.Misc;
 
 namespace Eliason.AudioVisualizer
 {
@@ -36,7 +39,7 @@ namespace Eliason.AudioVisualizer
             // TODO: Rita ut ett riktigt jävla enkelt histogram först, och byt sedan ut mot spectrogrammet
             // TODO: Volymkontroll (ctrl+mwheel)
 
-            lock (((ICollection)this._workQueue).SyncRoot)
+            lock (((ICollection) this._workQueue).SyncRoot)
             {
                 this._workQueue.Enqueue(work);
                 this._syncEvents.NewItemEvent.Set();
@@ -45,7 +48,7 @@ namespace Eliason.AudioVisualizer
 
         public void ClearWork()
         {
-            lock (((ICollection)this._workQueue).SyncRoot)
+            lock (((ICollection) this._workQueue).SyncRoot)
             {
                 this._workQueue.Clear();
             }
@@ -62,9 +65,9 @@ namespace Eliason.AudioVisualizer
         {
             // Start 2 threads for consuming work
 
-            var stepsPerHue = (int)Math.Pow(10, COLOR_CACHE_PRECISION);
+            var stepsPerHue = (int) Math.Pow(10, COLOR_CACHE_PRECISION);
             var hue = 360 * 0.70;
-            var steps = (int)Math.Floor(hue * stepsPerHue);
+            var steps = (int) Math.Floor(hue * stepsPerHue);
             this._cachedColors = new Color[steps];
             var step = 1d / stepsPerHue;
             for (var i = 0; i < steps; i++)
@@ -98,7 +101,7 @@ namespace Eliason.AudioVisualizer
                     }
 
                     Work work;
-                    lock (((ICollection)this._workQueue).SyncRoot)
+                    lock (((ICollection) this._workQueue).SyncRoot)
                     {
                         if (this._workQueue.Count == 0)
                         {
@@ -124,10 +127,7 @@ namespace Eliason.AudioVisualizer
                     }
 
                     var clientRectangle = Rectangle.Empty;
-                    Invoke(new Action(() =>
-                    {
-                        clientRectangle = this.ClientRectangle;
-                    }));
+                    Invoke(new Action(() => { clientRectangle = this.ClientRectangle; }));
 
                     if (this.DoWork(this, visualChannel, work, clientRectangle) > 0)
                     {
@@ -140,21 +140,21 @@ namespace Eliason.AudioVisualizer
             {
                 if (visualChannel != 0)
                 {
-                    Bass.BASS_ChannelStop(visualChannel);
-                    Bass.BASS_StreamFree(visualChannel);
+                    Bass.ChannelStop(visualChannel);
+                    Bass.StreamFree(visualChannel);
                 }
             }
         }
 
         private bool HasPotentialHumanSpeech(int visualChannel, long pos)
         {
-            Bass.BASS_ChannelSetPosition(visualChannel, pos);
+            Bass.ChannelSetPosition(visualChannel, pos);
 
             const int scaleFactor = _scaleFactorSqr * ushort.MaxValue;
             var buffer = new float[2048];
             var bufferResult = this._isMixerUsed
-                    ? BassMix.BASS_Mixer_ChannelGetData(visualChannel, buffer, (int)this._maxFft)
-                    : Bass.BASS_ChannelGetData(visualChannel, buffer, (int)this._maxFft);
+                ? BassMix.ChannelGetData(visualChannel, buffer, (int) this._maxFft)
+                : Bass.ChannelGetData(visualChannel, buffer, (int) this._maxFft);
 
             int verticalSamplesWithSound = 0;
             if (bufferResult > 0)
@@ -163,7 +163,7 @@ namespace Eliason.AudioVisualizer
                 {
                     // TODO: Don't convert to percentage, just check the threshold raw from the buffer
                     // TODO: Skip parts of the spectrogram that cannot be human speech
-                    float percentage = (float)Math.Min(1d, (Math.Sqrt(buffer[n]) * scaleFactor) / ushort.MaxValue);
+                    float percentage = (float) Math.Min(1d, (Math.Sqrt(buffer[n]) * scaleFactor) / ushort.MaxValue);
                     if (percentage > 0.35)
                     {
                         verticalSamplesWithSound++;
@@ -189,7 +189,7 @@ namespace Eliason.AudioVisualizer
                 visualChannel = this.CreateNewChannel();
 
                 // 10 millisecond increments
-                long increment = Bass.BASS_ChannelSeconds2Bytes(visualChannel, 0.01);
+                long increment = Bass.ChannelSeconds2Bytes(visualChannel, 0.01);
 
                 // And we increment enough to check for 1/5th of a second in each direction
                 int numberOfSteps = 20;
@@ -211,7 +211,8 @@ namespace Eliason.AudioVisualizer
                     for (int i = 0; i < numberOfSteps; i++)
                     {
                         long currentPos = pos - (i * increment);
-                        if (this.HasPotentialHumanSpeech(visualChannel, currentPos) == false && ++consequtiveHits == 3) return lastNonHit;
+                        if (this.HasPotentialHumanSpeech(visualChannel, currentPos) == false && ++consequtiveHits == 3)
+                            return lastNonHit;
                         else lastNonHit = currentPos;
                     }
                 }
@@ -221,7 +222,8 @@ namespace Eliason.AudioVisualizer
                     for (int i = 0; i < numberOfSteps; i++)
                     {
                         long currentPos = pos + (i * increment);
-                        if (this.HasPotentialHumanSpeech(visualChannel, currentPos) == true && ++consequtiveHits == 3) return lastNonHit;
+                        if (this.HasPotentialHumanSpeech(visualChannel, currentPos) == true && ++consequtiveHits == 3)
+                            return lastNonHit;
                         else lastNonHit = currentPos;
                     }
                 }
@@ -232,8 +234,8 @@ namespace Eliason.AudioVisualizer
             {
                 if (visualChannel != 0)
                 {
-                    Bass.BASS_ChannelStop(visualChannel);
-                    Bass.BASS_StreamFree(visualChannel);
+                    Bass.ChannelStop(visualChannel);
+                    Bass.StreamFree(visualChannel);
                 }
             }
         }
@@ -249,11 +251,11 @@ namespace Eliason.AudioVisualizer
                 try
                 {
                     // TODO: Replace all this code with custom BASS_ChannelGetData instead, and paint a heatmap rather than a 3DVoicePrint
-                    this._maxFrequencySpectrum = Utils.FFTFrequency2Index(audioVisualizer.GetFrequencyRange(), 4096, 44100);
+                    this._maxFrequencySpectrum = FFTFrequency2Index(audioVisualizer.GetFrequencyRange(), 4096, 44100);
 
                     var clientXFrom = audioVisualizer.ByteIndexToClientX(work.From);
                     var clientXTo = audioVisualizer.ByteIndexToClientX(work.To);
-                    var clientWidth = (int)(clientXTo - clientXFrom);
+                    var clientWidth = (int) (clientXTo - clientXFrom);
                     if (clientWidth <= 0)
                     {
                         continue;
@@ -264,7 +266,7 @@ namespace Eliason.AudioVisualizer
                     var bitmap = new DirectBitmap(bitmapWidth, bitmapHeight);
                     work.Bitmap = bitmap;
                     changes++;
-                    
+
                     var clipRectangle = new Rectangle(0, 0, bitmap.Width, bitmap.Height);
                     if (visualChannel == 0 || clipRectangle.Width <= 1 || clipRectangle.Height <= 1)
                     {
@@ -273,18 +275,18 @@ namespace Eliason.AudioVisualizer
 
                     var bytesPerPixel = (double) (work.To - work.From) / bitmap.Width;
 
-                    var verticalSamplesPerPixel = (double)this._maxFrequencySpectrum / clipRectangle.Height;
+                    var verticalSamplesPerPixel = (double) this._maxFrequencySpectrum / clipRectangle.Height;
                     var verticalSampleCount = this._maxFrequencySpectrum + 1;
 
                     const int scaleFactor = _scaleFactorSqr * ushort.MaxValue;
 
                     for (var pos = 0; pos < clipRectangle.Width; pos++)
                     {
-                        Bass.BASS_ChannelSetPosition(visualChannel, (long)Math.Floor(work.From + (pos * bytesPerPixel)));
+                        Bass.ChannelSetPosition(visualChannel, (long) Math.Floor(work.From + (pos * bytesPerPixel)));
 
                         var bufferResult = this._isMixerUsed
-                            ? BassMix.BASS_Mixer_ChannelGetData(visualChannel, buffer, (int)this._maxFft)
-                            : Bass.BASS_ChannelGetData(visualChannel, buffer, (int)this._maxFft);
+                            ? BassMix.ChannelGetData(visualChannel, buffer, (int) this._maxFft)
+                            : Bass.ChannelGetData(visualChannel, buffer, (int) this._maxFft);
 
                         var y1 = 0;
                         var highest = 0f;
@@ -297,17 +299,17 @@ namespace Eliason.AudioVisualizer
                                 // and keeping the highest frequency of the pixel, we get a better representation.
                                 highest = Math.Max(0, buffer[index]);
                             }
-                            
+
                             // TODO: Should not need to divide each time, should be able to increment on each loop.
-                            var currentY = (int)(Math.Round(index / verticalSamplesPerPixel) - 1);
+                            var currentY = (int) (Math.Round(index / verticalSamplesPerPixel) - 1);
                             if (currentY > y1)
                             {
                                 var dbIndex = bitmap.GetStartOffset(pos, y1);
 
                                 // From near-purple blue (0.70) until red (0.0) in HSV hue wheel.
                                 var percentage = Math.Min(1d, (Math.Sqrt(highest) * scaleFactor) / ushort.MaxValue);
-                                
-                                var cacheIndex = (int)Math.Floor((this._cachedColors.Length - 1) * percentage);
+
+                                var cacheIndex = (int) Math.Floor((this._cachedColors.Length - 1) * percentage);
                                 var currentColor = this._cachedColors[cacheIndex];
 
                                 bitmap.Bits[dbIndex + 0] = currentColor.B; // B
@@ -340,6 +342,13 @@ namespace Eliason.AudioVisualizer
             }
 
             return changes;
+        }
+
+        private static int FFTFrequency2Index(int frequency, int length, int sampleRate)
+        {
+            var bin = (int) Math.Round((double) length * frequency / sampleRate);
+            var lengthMidpoint = length / 2 - 1;
+            return bin > lengthMidpoint ? lengthMidpoint : bin;
         }
 
         private IEnumerable<Work> SplitAndMerge(Work queued)
@@ -432,8 +441,6 @@ namespace Eliason.AudioVisualizer
         public void GenerateSpeechDiarization()
         {
             var filePath = this.CurrentFilePath;
-
-
         }
 
         private bool _isMixerUsed;
@@ -441,42 +448,43 @@ namespace Eliason.AudioVisualizer
         private const int _scaleFactorLinear = 9;
         private int _maxHz = 4096;
         private int _maxFftSampleIndex = 2047;
-        private BASSData _maxFft = BASSData.BASS_DATA_FFT4096;
         private int _maxFrequencySpectrum = 2047;
         private Color[] _cachedColors;
 
-        private void SetMaxFFT(BASSData value)
+        private DataFlags _maxFft = DataFlags.FFT4096; // BASSData.BASS_DATA_FFT4096;
+
+        private void SetMaxFFT(DataFlags value)
         {
             switch (value)
             {
-                case BASSData.BASS_DATA_FFT512:
+                case DataFlags.FFT512:
                     this._maxHz = 1024;
                     this._maxFft = value;
                     this._maxFftSampleIndex = byte.MaxValue;
                     break;
-                case BASSData.BASS_DATA_FFT1024:
+                case DataFlags.FFT1024:
                     this._maxHz = 1024;
                     this._maxFft = value;
                     this._maxFftSampleIndex = 511;
                     break;
-                case BASSData.BASS_DATA_FFT2048:
+                case DataFlags.FFT2048:
                     this._maxHz = 2048;
                     this._maxFft = value;
                     this._maxFftSampleIndex = 1023;
                     break;
-                case BASSData.BASS_DATA_FFT4096:
+                case DataFlags.FFT4096:
                     this._maxHz = 4096;
                     this._maxFft = value;
                     this._maxFftSampleIndex = 2047;
                     break;
-                case BASSData.BASS_DATA_FFT8192:
+                case DataFlags.FFT8192:
                     this._maxHz = 8192;
                     this._maxFft = value;
                     this._maxFftSampleIndex = 4095;
                     break;
                 default:
                     this._maxHz = 4096;
-                    this._maxFft = BASSData.BASS_DATA_FFT4096;
+                    this._maxFft = DataFlags.FFT4096;
                     this._maxFftSampleIndex = 2047;
                     break;
             }
@@ -489,10 +497,12 @@ namespace Eliason.AudioVisualizer
             this._maxFrequencySpectrum = this._maxFftSampleIndex;
         }
 
+        /*
         public void SetMaxFrequencySpectrum(int value)
         {
             this._maxFrequencySpectrum = Math.Max(1, Math.Min(this._maxFftSampleIndex, value));
         }
+        */
 
         public static Color ColorFromHSV(double hue, double saturation, double value)
         {

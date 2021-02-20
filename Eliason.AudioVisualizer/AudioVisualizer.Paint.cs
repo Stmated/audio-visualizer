@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Eliason.Common;
-using Un4seen.Bass;
+using ManagedBass;
 
 namespace Eliason.AudioVisualizer
 {
@@ -88,9 +88,9 @@ namespace Eliason.AudioVisualizer
                     var repeatStartX = (float)this.ByteIndexToClientX(this._repeatCurrent);
                     if (float.IsNaN(repeatStartX) == false)
                     {
-                        var endByteIndex = this._repeatCurrent + Bass.BASS_ChannelSeconds2Bytes(this._playChannel, this._repeatLength);
+                        var endByteIndex = this._repeatCurrent + Bass.ChannelSeconds2Bytes(this._playChannel, this._repeatLength);
                         var repeatEndX = (float)this.ByteIndexToClientX(endByteIndex);
-                        var repeatMiddleX = (float)this.ByteIndexToClientX(endByteIndex - Bass.BASS_ChannelSeconds2Bytes(this._playChannel, this._repeatBackwards));
+                        var repeatMiddleX = (float)this.ByteIndexToClientX(endByteIndex - Bass.ChannelSeconds2Bytes(this._playChannel, this._repeatBackwards));
 
                         const int repeatMarkerHeight = 20;
                         var outlinePen = Pens.Black;
@@ -131,8 +131,8 @@ namespace Eliason.AudioVisualizer
             float paddingBottom = this.ClientRectangle.Bottom;
             if (this.IsPlayable)
             {
-                var millisecondsStart = (long)Math.Round(Bass.BASS_ChannelBytes2Seconds(this._playChannel, viewPortStart) * 1000d);
-                var millisecondsEnd = (long)Math.Round(Bass.BASS_ChannelBytes2Seconds(this._playChannel, viewPortEnd) * 1000d);
+                var millisecondsStart = (long)Math.Round(Bass.ChannelBytes2Seconds(this._playChannel, viewPortStart) * 1000d);
+                var millisecondsEnd = (long)Math.Round(Bass.ChannelBytes2Seconds(this._playChannel, viewPortEnd) * 1000d);
 
                 var millisecondsDistance = millisecondsEnd - millisecondsStart;
 
@@ -329,9 +329,9 @@ namespace Eliason.AudioVisualizer
                 long bytePosition;
                 if (this.IsPlayable)
                 {
-                    bytePosition = this.Normalize(Bass.BASS_ChannelGetPosition(this._playChannel));
+                    bytePosition = this.Normalize(Bass.ChannelGetPosition(this._playChannel));
 
-                    var timePosition = Bass.BASS_ChannelBytes2Seconds(this._playChannel, bytePosition);
+                    var timePosition = Bass.ChannelBytes2Seconds(this._playChannel, bytePosition);
                     var stringTimeCurrent = "" + this.getTimeString(timePosition / 60) + ":" + this.getTimeString(timePosition % 60);
                     g.DrawString(stringTimeCurrent, SystemFonts.DefaultFont, Brushes.White, overviewRectangle.Right, overviewRectangle.Top);
                 }

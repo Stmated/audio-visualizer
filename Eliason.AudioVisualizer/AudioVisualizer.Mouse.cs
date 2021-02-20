@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using Un4seen.Bass;
+using ManagedBass;
 
 namespace Eliason.AudioVisualizer
 {
@@ -34,9 +34,9 @@ namespace Eliason.AudioVisualizer
                     // Start playing at the location that was clicked.
                     var clickedByteIndex = this.ClientXToByteIndex(e.Location.X);
 
-                    switch (Bass.BASS_ChannelIsActive(this._playChannel))
+                    switch (Bass.ChannelIsActive(this._playChannel))
                     {
-                        case BASSActive.BASS_ACTIVE_PLAYING:
+                        case PlaybackState.Playing:
                             this.StartPlaying(clickedByteIndex);
                             break;
                         default:
@@ -74,9 +74,9 @@ namespace Eliason.AudioVisualizer
                         this._mouseDraggingObject = request.FocusedObject;
                         this._viewPortStart = this.GetCurrentViewPortStart();
 
-                        switch (Bass.BASS_ChannelIsActive(this._playChannel))
+                        switch (Bass.ChannelIsActive(this._playChannel))
                         {
-                            case BASSActive.BASS_ACTIVE_PLAYING:
+                            case PlaybackState.Playing:
                                 this._caretOffset = double.NaN;
                                 break;
                         }
@@ -389,9 +389,9 @@ namespace Eliason.AudioVisualizer
                 {
                     // Since we stopped panning outside of the currently playing viewport, we'll set the caret offset to NaN.
                     // This means that the viewport will stay where it is, while the track is playing.
-                    switch (Bass.BASS_ChannelIsActive(this._playChannel))
+                    switch (Bass.ChannelIsActive(this._playChannel))
                     {
-                        case BASSActive.BASS_ACTIVE_PLAYING:
+                        case PlaybackState.Playing:
                             this._caretOffset = double.NaN;
                             break;
                     }
