@@ -1,38 +1,29 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
-using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Eliason.AudioVisualizer
 {
     public class DirectBitmap : IDisposable
     {
-        public Bitmap Bitmap { get; private set; }
-        public byte[] Bits { get; private set; }
-        public bool Disposed { get; private set; }
-        public int Height { get; private set; }
-        public int Width { get; private set; }
-
-        protected GCHandle BitsHandle { get; private set; }
-
         public DirectBitmap(int width, int height)
         {
             Width = width;
             Height = height;
             Bits = new byte[width * height * 4];
             BitsHandle = GCHandle.Alloc(Bits, GCHandleType.Pinned);
-            Bitmap = new Bitmap(width, height, width * 4, PixelFormat.Format32bppPArgb, BitsHandle.AddrOfPinnedObject());
+            Bitmap = new Bitmap(width, height, width * 4, PixelFormat.Format32bppPArgb,
+                BitsHandle.AddrOfPinnedObject());
         }
 
-        public int GetStartOffset(int x, int y)
-        {
-            var scanSize = this.Width * 4;
-            return (x * 4) + (scanSize * y);
-        }
+        public Bitmap Bitmap { get; }
+        public byte[] Bits { get; }
+        public bool Disposed { get; set; }
+        public int Height { get; }
+        public int Width { get; }
+
+        protected GCHandle BitsHandle { get; }
 
         public void Dispose()
         {
@@ -40,6 +31,12 @@ namespace Eliason.AudioVisualizer
             Disposed = true;
             Bitmap.Dispose();
             BitsHandle.Free();
+        }
+
+        public int GetStartOffset(int x, int y)
+        {
+            var scanSize = Width * 4;
+            return x * 4 + scanSize * y;
         }
     }
 }

@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
+﻿using System.Threading;
 
 namespace Eliason.AudioVisualizer
 {
@@ -11,16 +6,15 @@ namespace Eliason.AudioVisualizer
     {
         public SyncEvents()
         {
-
-            this.NewItemEvent = new AutoResetEvent(false);
-            this.ExitThreadEvent = new ManualResetEvent(false);
-            this.EventArray = new WaitHandle[2];
-            this.EventArray[0] = this.NewItemEvent;
-            this.EventArray[1] = this.ExitThreadEvent;
+            NewItemEvent = new AutoResetEvent(false);
+            ExitThreadEvent = new ManualResetEvent(false);
+            EventArray = new WaitHandle[2];
+            EventArray[0] = NewItemEvent;
+            EventArray[1] = ExitThreadEvent;
         }
 
-        public EventWaitHandle ExitThreadEvent { get; private set; }
-        public EventWaitHandle NewItemEvent { get; private set; }
-        public WaitHandle[] EventArray { get; private set; }
+        public EventWaitHandle ExitThreadEvent { get; }
+        public EventWaitHandle NewItemEvent { get; }
+        public WaitHandle[] EventArray { get; }
     }
 }

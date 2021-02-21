@@ -2,10 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Linq;
-using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 using ManagedBass;
 using ManagedBass.Mix;
 
@@ -17,14 +14,25 @@ namespace Eliason.AudioVisualizer
 {
     public partial class AudioVisualizer
     {
-        private static int staticWorkConsumerThreadInstanceCounter = 0;
-
-        private readonly Queue<Work> _workQueue = new Queue<Work>();
-        private readonly List<Work> _work = new List<Work>();
+        private const int COLOR_CACHE_PRECISION = 0;
+        private const int _scaleFactorSqr = 4;
+        private const int _scaleFactorLinear = 9;
+        private static int staticWorkConsumerThreadInstanceCounter;
 
         private readonly SyncEvents _syncEvents = new SyncEvents();
+        private readonly List<Work> _work = new List<Work>();
 
-        private readonly Object _workSyncLock = new Object();
+        private readonly Queue<Work> _workQueue = new Queue<Work>();
+
+        private readonly object _workSyncLock = new object();
+        private Color[] _cachedColors;
+
+        private bool _isMixerUsed;
+
+        private DataFlags _maxFft = DataFlags.FFT4096; // BASSData.BASS_DATA_FFT4096;
+        private int _maxFftSampleIndex = 2047;
+        private int _maxFrequencySpectrum = 2047;
+        private int _maxHz = 4096;
 
         public void QueueWork(Work work)
         {
@@ -39,27 +47,25 @@ namespace Eliason.AudioVisualizer
             // TODO: Rita ut ett riktigt jävla enkelt histogram först, och byt sedan ut mot spectrogrammet
             // TODO: Volymkontroll (ctrl+mwheel)
 
-            lock (((ICollection) this._workQueue).SyncRoot)
+            lock (((ICollection) _workQueue).SyncRoot)
             {
-                this._workQueue.Enqueue(work);
-                this._syncEvents.NewItemEvent.Set();
+                _workQueue.Enqueue(work);
+                _syncEvents.NewItemEvent.Set();
             }
         }
 
         public void ClearWork()
         {
-            lock (((ICollection) this._workQueue).SyncRoot)
+            lock (((ICollection) _workQueue).SyncRoot)
             {
-                this._workQueue.Clear();
+                _workQueue.Clear();
             }
 
-            lock (this._workSyncLock)
+            lock (_workSyncLock)
             {
-                this._work.Clear();
+                _work.Clear();
             }
         }
-
-        private const int COLOR_CACHE_PRECISION = 0;
 
         private void StartConsumerThreads()
         {
@@ -68,18 +74,18 @@ namespace Eliason.AudioVisualizer
             var stepsPerHue = (int) Math.Pow(10, COLOR_CACHE_PRECISION);
             var hue = 360 * 0.70;
             var steps = (int) Math.Floor(hue * stepsPerHue);
-            this._cachedColors = new Color[steps];
+            _cachedColors = new Color[steps];
             var step = 1d / stepsPerHue;
             for (var i = 0; i < steps; i++)
             {
                 var color = ColorFromHSV(hue, 0.8, 0.8);
-                this._cachedColors[i] = color;
+                _cachedColors[i] = color;
                 hue -= step;
             }
 
-            for (int i = 0; i < 2; i++)
+            for (var i = 0; i < 2; i++)
             {
-                var thread = new Thread(this.WorkConsumerThread)
+                var thread = new Thread(WorkConsumerThread)
                 {
                     IsBackground = true
                 };
@@ -89,51 +95,39 @@ namespace Eliason.AudioVisualizer
 
         private void WorkConsumerThread()
         {
-            Thread.CurrentThread.Name = "AV-Cons-Thread-" + (staticWorkConsumerThreadInstanceCounter++);
+            Thread.CurrentThread.Name = "AV-Cons-Thread-" + staticWorkConsumerThreadInstanceCounter++;
             var visualChannel = 0;
             try
             {
-                while (WaitHandle.WaitAny(this._syncEvents.EventArray) != 1)
+                while (WaitHandle.WaitAny(_syncEvents.EventArray) != 1)
                 {
-                    if (visualChannel == 0)
-                    {
-                        visualChannel = this.CreateNewChannel();
-                    }
+                    if (visualChannel == 0) visualChannel = CreateNewChannel();
 
                     Work work;
-                    lock (((ICollection) this._workQueue).SyncRoot)
+                    lock (((ICollection) _workQueue).SyncRoot)
                     {
-                        if (this._workQueue.Count == 0)
-                        {
+                        if (_workQueue.Count == 0)
                             // We've already been dequeued by another thread or something.
                             continue;
-                        }
 
-                        work = this._workQueue.Dequeue();
+                        work = _workQueue.Dequeue();
                     }
 
                     if (visualChannel == 0)
-                    {
                         // Could not create the visual channel.
                         // Most likely the underlying file is corrupt, or not loaded.
                         // We dequeue the received work, so the queue does not grow endlessly.
                         // But we do nothing with the work.
                         continue;
-                    }
 
-                    if (String.IsNullOrEmpty(this._currentFilePath))
-                    {
-                        continue;
-                    }
+                    if (string.IsNullOrEmpty(CurrentFilePath)) continue;
 
                     var clientRectangle = Rectangle.Empty;
-                    Invoke(new Action(() => { clientRectangle = this.ClientRectangle; }));
+                    Invoke(new Action(() => { clientRectangle = ClientRectangle; }));
 
-                    if (this.DoWork(this, visualChannel, work, clientRectangle) > 0)
-                    {
+                    if (DoWork(this, visualChannel, work, clientRectangle) > 0)
                         // Call the AudoVisualizer to invalidate its rendering!
                         BeginInvoke(new Action(Invalidate));
-                    }
                 }
             }
             finally
@@ -152,28 +146,23 @@ namespace Eliason.AudioVisualizer
 
             const int scaleFactor = _scaleFactorSqr * ushort.MaxValue;
             var buffer = new float[2048];
-            var bufferResult = this._isMixerUsed
-                ? BassMix.ChannelGetData(visualChannel, buffer, (int) this._maxFft)
-                : Bass.ChannelGetData(visualChannel, buffer, (int) this._maxFft);
+            var bufferResult = _isMixerUsed
+                ? BassMix.ChannelGetData(visualChannel, buffer, (int) _maxFft)
+                : Bass.ChannelGetData(visualChannel, buffer, (int) _maxFft);
 
-            int verticalSamplesWithSound = 0;
+            var verticalSamplesWithSound = 0;
             if (bufferResult > 0)
-            {
-                for (int n = 0; n < buffer.Length; n++)
+                for (var n = 0; n < buffer.Length; n++)
                 {
                     // TODO: Don't convert to percentage, just check the threshold raw from the buffer
                     // TODO: Skip parts of the spectrogram that cannot be human speech
-                    float percentage = (float) Math.Min(1d, (Math.Sqrt(buffer[n]) * scaleFactor) / ushort.MaxValue);
+                    var percentage = (float) Math.Min(1d, Math.Sqrt(buffer[n]) * scaleFactor / ushort.MaxValue);
                     if (percentage > 0.35)
                     {
                         verticalSamplesWithSound++;
-                        if (verticalSamplesWithSound > 4)
-                        {
-                            return true;
-                        }
+                        if (verticalSamplesWithSound > 4) return true;
                     }
                 }
-            }
 
             return false;
         }
@@ -182,51 +171,47 @@ namespace Eliason.AudioVisualizer
         {
             var buffer = new float[2048];
 
-            int visualChannel = 0;
+            var visualChannel = 0;
             try
             {
-                long originalPos = pos;
-                visualChannel = this.CreateNewChannel();
+                var originalPos = pos;
+                visualChannel = CreateNewChannel();
 
                 // 10 millisecond increments
-                long increment = Bass.ChannelSeconds2Bytes(visualChannel, 0.01);
+                var increment = Bass.ChannelSeconds2Bytes(visualChannel, 0.01);
 
                 // And we increment enough to check for 1/5th of a second in each direction
-                int numberOfSteps = 20;
+                var numberOfSteps = 20;
 
                 var currentlyOnSpeechCounter =
-                    (this.HasPotentialHumanSpeech(visualChannel, pos - increment) ? 1 : 0)
-                    + (this.HasPotentialHumanSpeech(visualChannel, pos) ? 1 : 0)
-                    + (this.HasPotentialHumanSpeech(visualChannel, pos + increment) ? 1 : 0);
-                var currentlyOnSpeech = (currentlyOnSpeechCounter >= 2);
+                    (HasPotentialHumanSpeech(visualChannel, pos - increment) ? 1 : 0)
+                    + (HasPotentialHumanSpeech(visualChannel, pos) ? 1 : 0)
+                    + (HasPotentialHumanSpeech(visualChannel, pos + increment) ? 1 : 0);
+                var currentlyOnSpeech = currentlyOnSpeechCounter >= 2;
 
                 // TODO: If on speech, then check if is close to forward-search NOT SPEECH -> Speech within timeframe.
                 //       Then it's probably the start of a new quick sentence and the next subtitle should start there.
 
-                long lastNonHit = pos;
-                int consequtiveHits = 0;
+                var lastNonHit = pos;
+                var consequtiveHits = 0;
                 if (currentlyOnSpeech)
-                {
                     // If we're currently on speech, then search backwards for a moment without speech.
-                    for (int i = 0; i < numberOfSteps; i++)
+                    for (var i = 0; i < numberOfSteps; i++)
                     {
-                        long currentPos = pos - (i * increment);
-                        if (this.HasPotentialHumanSpeech(visualChannel, currentPos) == false && ++consequtiveHits == 3)
+                        var currentPos = pos - i * increment;
+                        if (HasPotentialHumanSpeech(visualChannel, currentPos) == false && ++consequtiveHits == 3)
                             return lastNonHit;
                         else lastNonHit = currentPos;
                     }
-                }
                 else
-                {
                     // If we're currently NOT on speech, then search forwards for a moment with speech.
-                    for (int i = 0; i < numberOfSteps; i++)
+                    for (var i = 0; i < numberOfSteps; i++)
                     {
-                        long currentPos = pos + (i * increment);
-                        if (this.HasPotentialHumanSpeech(visualChannel, currentPos) == true && ++consequtiveHits == 3)
+                        var currentPos = pos + i * increment;
+                        if (HasPotentialHumanSpeech(visualChannel, currentPos) && ++consequtiveHits == 3)
                             return lastNonHit;
                         else lastNonHit = currentPos;
                     }
-                }
 
                 return pos;
             }
@@ -242,24 +227,20 @@ namespace Eliason.AudioVisualizer
 
         private int DoWork(AudioVisualizer audioVisualizer, int visualChannel, Work queued, Rectangle clientRectangle)
         {
-            int changes = 0;
-            var todoWorkList = this.SplitAndMerge(queued);
+            var changes = 0;
+            var todoWorkList = SplitAndMerge(queued);
 
             var buffer = new float[2048]; // Move back inside loop if behavior is odd
             foreach (var work in todoWorkList)
-            {
                 try
                 {
                     // TODO: Replace all this code with custom BASS_ChannelGetData instead, and paint a heatmap rather than a 3DVoicePrint
-                    this._maxFrequencySpectrum = FFTFrequency2Index(audioVisualizer.GetFrequencyRange(), 4096, 44100);
+                    _maxFrequencySpectrum = FFTFrequency2Index(audioVisualizer.GetFrequencyRange(), 4096, 44100);
 
                     var clientXFrom = audioVisualizer.ByteIndexToClientX(work.From);
                     var clientXTo = audioVisualizer.ByteIndexToClientX(work.To);
                     var clientWidth = (int) (clientXTo - clientXFrom);
-                    if (clientWidth <= 0)
-                    {
-                        continue;
-                    }
+                    if (clientWidth <= 0) continue;
 
                     var bitmapWidth = clientWidth;
                     var bitmapHeight = clientRectangle.Height;
@@ -268,25 +249,22 @@ namespace Eliason.AudioVisualizer
                     changes++;
 
                     var clipRectangle = new Rectangle(0, 0, bitmap.Width, bitmap.Height);
-                    if (visualChannel == 0 || clipRectangle.Width <= 1 || clipRectangle.Height <= 1)
-                    {
-                        continue;
-                    }
+                    if (visualChannel == 0 || clipRectangle.Width <= 1 || clipRectangle.Height <= 1) continue;
 
                     var bytesPerPixel = (double) (work.To - work.From) / bitmap.Width;
 
-                    var verticalSamplesPerPixel = (double) this._maxFrequencySpectrum / clipRectangle.Height;
-                    var verticalSampleCount = this._maxFrequencySpectrum + 1;
+                    var verticalSamplesPerPixel = (double) _maxFrequencySpectrum / clipRectangle.Height;
+                    var verticalSampleCount = _maxFrequencySpectrum + 1;
 
                     const int scaleFactor = _scaleFactorSqr * ushort.MaxValue;
 
                     for (var pos = 0; pos < clipRectangle.Width; pos++)
                     {
-                        Bass.ChannelSetPosition(visualChannel, (long) Math.Floor(work.From + (pos * bytesPerPixel)));
+                        Bass.ChannelSetPosition(visualChannel, (long) Math.Floor(work.From + pos * bytesPerPixel));
 
-                        var bufferResult = this._isMixerUsed
-                            ? BassMix.ChannelGetData(visualChannel, buffer, (int) this._maxFft)
-                            : Bass.ChannelGetData(visualChannel, buffer, (int) this._maxFft);
+                        var bufferResult = _isMixerUsed
+                            ? BassMix.ChannelGetData(visualChannel, buffer, (int) _maxFft)
+                            : Bass.ChannelGetData(visualChannel, buffer, (int) _maxFft);
 
                         var y1 = 0;
                         var highest = 0f;
@@ -294,11 +272,9 @@ namespace Eliason.AudioVisualizer
                         for (var index = 1; index < verticalSampleCount; ++index)
                         {
                             if (highest < buffer[index])
-                            {
                                 // By only printing the pixel if we've passed the current pixel's frequencies,
                                 // and keeping the highest frequency of the pixel, we get a better representation.
                                 highest = Math.Max(0, buffer[index]);
-                            }
 
                             // TODO: Should not need to divide each time, should be able to increment on each loop.
                             var currentY = (int) (Math.Round(index / verticalSamplesPerPixel) - 1);
@@ -307,10 +283,10 @@ namespace Eliason.AudioVisualizer
                                 var dbIndex = bitmap.GetStartOffset(pos, y1);
 
                                 // From near-purple blue (0.70) until red (0.0) in HSV hue wheel.
-                                var percentage = Math.Min(1d, (Math.Sqrt(highest) * scaleFactor) / ushort.MaxValue);
+                                var percentage = Math.Min(1d, Math.Sqrt(highest) * scaleFactor / ushort.MaxValue);
 
-                                var cacheIndex = (int) Math.Floor((this._cachedColors.Length - 1) * percentage);
-                                var currentColor = this._cachedColors[cacheIndex];
+                                var cacheIndex = (int) Math.Floor((_cachedColors.Length - 1) * percentage);
+                                var currentColor = _cachedColors[cacheIndex];
 
                                 bitmap.Bits[dbIndex + 0] = currentColor.B; // B
                                 bitmap.Bits[dbIndex + 1] = currentColor.G; // G
@@ -323,8 +299,7 @@ namespace Eliason.AudioVisualizer
                         }
 
                         if (pos < clipRectangle.Width - 1)
-                        {
-                            for (int y = 0; y < clipRectangle.Height; y++)
+                            for (var y = 0; y < clipRectangle.Height; y++)
                             {
                                 var dbIndex = bitmap.GetStartOffset(pos + 1, y);
                                 bitmap.Bits[dbIndex + 0] = 0;
@@ -332,14 +307,12 @@ namespace Eliason.AudioVisualizer
                                 bitmap.Bits[dbIndex + 2] = 0;
                                 bitmap.Bits[dbIndex + 3] = 255;
                             }
-                        }
                     }
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine(ex.Message);
                 }
-            }
 
             return changes;
         }
@@ -354,19 +327,19 @@ namespace Eliason.AudioVisualizer
         private IEnumerable<Work> SplitAndMerge(Work queued)
         {
             var todoWorkList = new List<Work>();
-            lock (this._workSyncLock)
+            lock (_workSyncLock)
             {
                 // Let's go through all the existing works, and find the gaps that should be added.
                 // This might result in a smaller work, several split segments, or of the originally queued size.
                 //long startFrom = -1;
-                int workIndex = 0;
-                for (; workIndex < this._work.Count; workIndex++)
+                var workIndex = 0;
+                for (; workIndex < _work.Count; workIndex++)
                 {
-                    var existing = this._work[workIndex];
+                    var existing = _work[workIndex];
                     if (existing.IsLaterThan(queued))
                     {
                         // We're no longer in the range of the queued work. Let's abort.
-                        this._work.Insert(workIndex, queued);
+                        _work.Insert(workIndex, queued);
                         todoWorkList.Add(queued);
                         break;
                     }
@@ -378,11 +351,9 @@ namespace Eliason.AudioVisualizer
                         var existingStartingBefore = existing.IsStartingBefore(queued);
                         var existingEndingAfter = existing.IsEndingAfter(queued);
                         if (existingStartingBefore)
-                        {
                             // The existing starts before the queued.
                             // So the minimum From should be the To of the existing.
                             queued.From = existing.To;
-                        }
 
                         if (existingEndingAfter)
                         {
@@ -394,7 +365,7 @@ namespace Eliason.AudioVisualizer
                             if (distance > 0)
                             {
                                 var newWork = new Work(queued.From, queued.To);
-                                this._work.Insert(workIndex, newWork);
+                                _work.Insert(workIndex, newWork);
                                 todoWorkList.Add(newWork);
                             }
                         }
@@ -408,7 +379,7 @@ namespace Eliason.AudioVisualizer
                             var preWork = new Work(queued.From, existing.From);
                             if (preWork.To - preWork.From > 0)
                             {
-                                this._work.Insert(workIndex, preWork);
+                                _work.Insert(workIndex, preWork);
                                 todoWorkList.Add(preWork);
                             }
 
@@ -420,7 +391,7 @@ namespace Eliason.AudioVisualizer
                     {
                         // The queued is earlier than the next existing work.
                         // So we can safely just add this one and break out.
-                        this._work.Insert(workIndex, queued);
+                        _work.Insert(workIndex, queued);
                         todoWorkList.Add(queued);
                         break;
                     }
@@ -430,7 +401,7 @@ namespace Eliason.AudioVisualizer
                 {
                     // There's still some left of what was originally queued.
                     // Let's add it to the work queue.
-                    this._work.Insert(workIndex, queued);
+                    _work.Insert(workIndex, queued);
                     todoWorkList.Add(queued);
                 }
             }
@@ -440,61 +411,48 @@ namespace Eliason.AudioVisualizer
 
         public void GenerateSpeechDiarization()
         {
-            var filePath = this.CurrentFilePath;
+            var filePath = CurrentFilePath;
         }
-
-        private bool _isMixerUsed;
-        private const int _scaleFactorSqr = 4;
-        private const int _scaleFactorLinear = 9;
-        private int _maxHz = 4096;
-        private int _maxFftSampleIndex = 2047;
-        private int _maxFrequencySpectrum = 2047;
-        private Color[] _cachedColors;
-
-        private DataFlags _maxFft = DataFlags.FFT4096; // BASSData.BASS_DATA_FFT4096;
 
         private void SetMaxFFT(DataFlags value)
         {
             switch (value)
             {
                 case DataFlags.FFT512:
-                    this._maxHz = 1024;
-                    this._maxFft = value;
-                    this._maxFftSampleIndex = byte.MaxValue;
+                    _maxHz = 1024;
+                    _maxFft = value;
+                    _maxFftSampleIndex = byte.MaxValue;
                     break;
                 case DataFlags.FFT1024:
-                    this._maxHz = 1024;
-                    this._maxFft = value;
-                    this._maxFftSampleIndex = 511;
+                    _maxHz = 1024;
+                    _maxFft = value;
+                    _maxFftSampleIndex = 511;
                     break;
                 case DataFlags.FFT2048:
-                    this._maxHz = 2048;
-                    this._maxFft = value;
-                    this._maxFftSampleIndex = 1023;
+                    _maxHz = 2048;
+                    _maxFft = value;
+                    _maxFftSampleIndex = 1023;
                     break;
                 case DataFlags.FFT4096:
-                    this._maxHz = 4096;
-                    this._maxFft = value;
-                    this._maxFftSampleIndex = 2047;
+                    _maxHz = 4096;
+                    _maxFft = value;
+                    _maxFftSampleIndex = 2047;
                     break;
                 case DataFlags.FFT8192:
-                    this._maxHz = 8192;
-                    this._maxFft = value;
-                    this._maxFftSampleIndex = 4095;
+                    _maxHz = 8192;
+                    _maxFft = value;
+                    _maxFftSampleIndex = 4095;
                     break;
                 default:
-                    this._maxHz = 4096;
-                    this._maxFft = DataFlags.FFT4096;
-                    this._maxFftSampleIndex = 2047;
+                    _maxHz = 4096;
+                    _maxFft = DataFlags.FFT4096;
+                    _maxFftSampleIndex = 2047;
                     break;
             }
 
-            if (this._maxFrequencySpectrum <= this._maxFftSampleIndex)
-            {
-                return;
-            }
+            if (_maxFrequencySpectrum <= _maxFftSampleIndex) return;
 
-            this._maxFrequencySpectrum = this._maxFftSampleIndex;
+            _maxFrequencySpectrum = _maxFftSampleIndex;
         }
 
         /*

@@ -1,49 +1,41 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.InteropServices.WindowsRuntime;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Eliason.AudioVisualizer
 {
     public class Interval
     {
-        private long _start;
         private long _end;
+        private long _start;
+
+        public Interval(long start, long end)
+        {
+            _start = start;
+            _end = end;
+        }
 
         public long Start
         {
-            get { return this._start; }
-            set { this._start = Math.Min(this.End - 1, value); }
+            get => _start;
+            set => _start = Math.Min(End - 1, value);
         }
 
         public long End
         {
-            get { return this._end; }
-            set { this._end = Math.Max(this.Start + 1, value); }
+            get => _end;
+            set => _end = Math.Max(Start + 1, value);
         }
 
-        public long Length
-        {
-            get { return this.End - this.Start; }
-        }
-
-        public Interval(long start, long end)
-        {
-            this._start = start;
-            this._end = end;
-        }
+        public long Length => End - Start;
 
         public bool IsOverlapping(Interval other)
         {
-            return this.Start < other.End && other.Start < this.End;
+            return Start < other.End && other.Start < End;
         }
 
         public long[] GetDistanceFromOverlap(long point)
         {
-            var distanceToStart = this.Start - point;
-            var distanceToEnd = point - this.End;
+            var distanceToStart = Start - point;
+            var distanceToEnd = point - End;
 
             return new[]
             {

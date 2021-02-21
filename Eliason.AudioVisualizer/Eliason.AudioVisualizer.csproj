@@ -199,11 +199,6 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
-    <Content Include="LIUM_SpkDiarization-4.2.jar">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
-  <ItemGroup>
     <ProjectReference Include="..\..\Eliason.Common\Eliason.Common\Eliason.Common.csproj">
       <Project>{463A2426-1DE4-4145-BCE9-2AAE2E49ED22}</Project>
       <Name>Eliason.Common</Name>

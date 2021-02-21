@@ -1,78 +1,60 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
-using System.Windows.Forms;
+using Eliason.Common;
 using Eliason.TextEditor;
 using Eliason.TextEditor.Native;
 using Eliason.TextEditor.TextStyles;
-using Eliason.Common;
 
 namespace Eliason.AudioVisualizer
 {
     public class TextStyleSpeaker : TextStyleTextColorer
     {
-        public override TextStylePaintMode PaintMode
-        {
-            get
-            {
-                return TextStylePaintMode.Custom;
-            }
-        }
+        private readonly Regex _regexManual = new Regex("^\\d:", RegexOptions.Compiled);
+        private readonly Regex _regexSwitch = new Regex("^-[^\\-]", RegexOptions.Compiled);
 
-        public override string Name
-        {
-            get { return "Speaker"; }
-        }
+        private readonly Regex _regexTimestamp =
+            new Regex(@"\[(\d\d:\d\d:\d\d,\d\d\d) -> (\d\d:\d\d:\d\d,\d\d\d)\](-?)", RegexOptions.Compiled);
 
-        public override string NameKey
-        {
-            get { return "speaker"; }
-        }
+        public override TextStylePaintMode PaintMode => TextStylePaintMode.Custom;
 
-        public override string Description
-        {
-            get { return "Text style for who is the current speaker"; }
-        }
+        public override string Name => "Speaker";
 
-        private Regex _regexTimestamp = new Regex(@"\[(\d\d:\d\d:\d\d,\d\d\d) -> (\d\d:\d\d:\d\d,\d\d\d)\](-?)", RegexOptions.Compiled);
-        private Regex _regexManual = new Regex("^\\d:", RegexOptions.Compiled);
-        private Regex _regexSwitch = new Regex("^-[^\\-]", RegexOptions.Compiled);
+        public override string NameKey => "speaker";
 
-        public override ITextSegmentStyled FindStyledTextSegment(ITextEditor textEditor, ITextSegment textSegment, ITextDocument document, int index, int length, int textColumnIndex)
+        public override string Description => "Text style for who is the current speaker";
+
+        public override ITextSegmentStyled FindStyledTextSegment(ITextEditor textEditor, ITextSegment textSegment,
+            ITextDocument document, int index, int length, int textColumnIndex)
         {
             var lineIndex = document.GetLineFromCharIndex(textSegment.Index + index, textColumnIndex);
             var firstCharIndex = document.GetFirstCharIndexFromLine(lineIndex);
-            var styleCount = document.TextSegmentStyledManager.Get(firstCharIndex, this.NameKey, textColumnIndex).Count();
+            var styleCount = document.TextSegmentStyledManager.Get(firstCharIndex, NameKey, textColumnIndex).Count();
 
-            if (styleCount > 0)
-            {
-                return null;
-            }
+            if (styleCount > 0) return null;
 
             var content = document.GetLineText(lineIndex, textColumnIndex);
 
-            var isManual = this._regexManual.IsMatch(content); // Regex.IsMatch(content, "^\\d:");
-            var isSwitch = this._regexSwitch.IsMatch(content); // Regex.IsMatch(content, "^-[^\\-]");
+            var isManual = _regexManual.IsMatch(content); // Regex.IsMatch(content, "^\\d:");
+            var isSwitch = _regexSwitch.IsMatch(content); // Regex.IsMatch(content, "^-[^\\-]");
 
             if (isManual || isSwitch)
             {
                 var segment = document.CreateStyledTextSegment(this);
                 segment.Index = 0;
                 segment.SetLength(textColumnIndex, 1);
-                segment.Object = isManual ? int.Parse("" + document.GetCharFromIndex(firstCharIndex, textColumnIndex)) : -1;
+                segment.Object =
+                    isManual ? int.Parse("" + document.GetCharFromIndex(firstCharIndex, textColumnIndex)) : -1;
 
                 return segment;
             }
-            else if (content.StartsWith("["))
+
+            if (content.StartsWith("["))
             {
                 var match = _regexTimestamp.Match(content);
                 if (match.Success)
-                {
-                    if (String.IsNullOrEmpty(match.Groups[3].Value) == false)
+                    if (string.IsNullOrEmpty(match.Groups[3].Value) == false)
                     {
                         var segment = document.CreateStyledTextSegment(this);
                         segment.Index = 0;
@@ -81,49 +63,41 @@ namespace Eliason.AudioVisualizer
 
                         return segment;
                     }
-                }
             }
 
             return null;
         }
 
-        public override void Paint(IntPtr hdc, ITextSegmentStyled textSegment, ITextView textView, TextSegmentVisualInfo info, int x, int y, int lineHeight, StyleRenderInfo sri)
+        public override void Paint(IntPtr hdc, ITextSegmentStyled textSegment, ITextView textView,
+            TextSegmentVisualInfo info, int x, int y, int lineHeight, StyleRenderInfo sri)
         {
-            var index = (int)textSegment.Object;
+            var index = (int) textSegment.Object;
 
             var allSegments = sri.Get<ITextSegmentStyled[]>("speaker.segments");
             if (allSegments == null)
             {
-                allSegments = textView.TextDocument.TextSegmentStyledManager.GetStyledTextSegments(this.NameKey).ToArray();
+                allSegments = textView.TextDocument.TextSegmentStyledManager.GetStyledTextSegments(NameKey).ToArray();
                 sri.Set("speaker.segments", allSegments);
             }
 
             Color color;
             if (index == -1)
-            {
                 // TODO: Figure out the current speaker's index
 
                 foreach (var styledSegment in allSegments)
                 {
                     var otherIndex = (int) styledSegment.Object;
                     if (otherIndex == -1)
-                    {
-                        index = (index == 1) ? 2 : 1;
-                    }
+                        index = index == 1 ? 2 : 1;
                     else
-                    {
                         index = otherIndex;
-                    }
 
                     if (styledSegment == textSegment)
-                    {
                         // We've arrived at our own row, so let's abort now.
                         break;
-                    }
                 }
-            }
 
-            bool fill = false;
+            var fill = false;
             switch (index)
             {
                 case 1:
@@ -172,7 +146,8 @@ namespace Eliason.AudioVisualizer
             }
             else
             {
-                var pen = new SafeHandleGDI(SafeNativeMethods.CreatePen(NativeConstants.PS_SOLID, -1, ColorTranslator.ToWin32(color)));
+                var pen = new SafeHandleGDI(SafeNativeMethods.CreatePen(NativeConstants.PS_SOLID, -1,
+                    ColorTranslator.ToWin32(color)));
 
                 var previousPen = SafeNativeMethods.SelectObject(hdc, pen.DangerousGetHandle());
                 var previousBkMode = SafeNativeMethods.SetBkMode(hdc, NativeConstants.TRANSPARENT);
@@ -186,7 +161,6 @@ namespace Eliason.AudioVisualizer
                 SafeNativeMethods.SelectObject(hdc, previousPen);
                 SafeNativeMethods.SetBkMode(hdc, previousBkMode);
             }
-            
         }
 
         public override RenderStateItem GetNaturalRenderColors(ITextEditor textEditor)
